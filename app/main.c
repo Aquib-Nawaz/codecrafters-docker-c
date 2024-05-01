@@ -3,6 +3,30 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <sys/stat.h>
+
+int File_Copy(char FileSource[], char FileDestination[])
+{
+	char    c[4096]; // or any other constant you like
+	FILE    *stream_R = fopen(FileSource, "r");
+	if(stream_R==NULL){
+		perror("fread");
+		exit(1);
+	}
+	FILE    *stream_W = fopen(FileDestination, "w");   //create and write to file
+
+	while (!feof(stream_R)) {
+		size_t bytes = fread(c, 1, sizeof(c), stream_R);
+		if (bytes) {
+			fwrite(c, 1, bytes, stream_W);
+		}
+	}
+	//close streams
+	fclose(stream_R);
+	fclose(stream_W);
+	chmod(FileDestination, 0777);
+	return 0;
+}
 
 // Usage: your_docker.sh run <image> <command> <arg1> <arg2> ...
 int main(int argc, char *argv[]) {
@@ -36,7 +60,29 @@ int main(int argc, char *argv[]) {
 	     close(pipe_stderr[0]);
 	     dup2(pipe_stdout[1], STDOUT_FILENO);
 	     dup2(pipe_stderr[1], STDERR_FILENO);
-	     execv(command, &argv[3]);
+
+		 struct stat st = {0};
+
+		 char * tempDir = "chroot";
+
+		 if (stat(tempDir, &st) == -1) {
+			 mkdir(tempDir, 0700);
+		 }
+
+		 chdir(tempDir);
+		 char* binaryFile = "exec";
+		 File_Copy(command, binaryFile);
+
+
+		 if (chroot(".") != 0) {
+			 perror("chroot chroot/");
+			 return 1;
+		 }
+		 chdir("/");
+
+		 execv(binaryFile, &argv[3]);
+		 unlink(binaryFile);
+
 	 } else {
 	 	   // We're in parent
 
